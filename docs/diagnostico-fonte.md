@@ -26,12 +26,15 @@ Investigação completa em **LigaMagic**. Nos demais, apenas confirmação de qu
 | Verificação | Magic | Pokémon | Yu-Gi-Oh | Lorcana |
 |---|---|---|---|---|
 | `cardsjson` no HTML cru | sim | sim | sim | sim |
-| Mesmos nomes de campo | referência | sim | sim | sim |
+| Estrutura (array de objetos por carta) | referência | sim | sim | sim |
+| Mesmo *conjunto* de campos | referência | não¹ | não¹ | não¹ |
 | `robots.txt` conferido | sim | sim | sim | sim |
 | `g_iTCG` | `1` | `2` | `3` | `9` |
 | Hierarquia de edições | sim | sim | sim | sim |
 | Rótulo "(Agrupada)" | sim | **não** | **não** | **não** |
 | "EXIBIR MAIS" na lista de edições | sim | sim | sim | não |
+
+¹ Núcleo comum de **21 campos**; o Magic carrega 4 exclusivos (`iC`, `iH`, `iPP`, `tag`) e os outros três, 2 (`sSigla`, `idNC`). Pior: campos de mesmo nome mudam de sentido entre jogos. Detalhe na seção [Divergência entre jogos](#divergência-entre-jogos) do mapa de campos.
 
 Fixtures salvas em `tests/fixtures/` (mover de `docs/` — HTML de amostra é fixture de teste, não documentação).
 
@@ -176,7 +179,9 @@ Funciona igual em página de grupo e de edição avulsa. Note que a sigla vem **
 Isso separa o spider em dois estágios:
 
 1. `parse` de `?view=cards/edicoes` → dicionário `{idE: (nome, sigla, id_do_pai)}`, incluindo o vínculo hierárquico de todos os sites
-2. `parse` de cada edição (`edid=`) → emitir os itens, casando o `idE` com o dicionário para preencher nome, sigla e pai
+2. `parse` de cada edição (`edid=`) → emitir os itens. **A identidade da edição vem da requisição** — o `edid=`/`sigla` que você pediu, carregado no `cb_kwargs`/`meta` da própria `Request` — e *não* do `idE` lido de volta do payload.
+
+⚠️ **Por que não reler o `idE` do payload:** no Yu-Gi-Oh ele vem `0` em **todas** as cartas (verificado: 36/36 na amostra `L26D`); quem identifica a edição lá é o `sSigla`. Casar edição pelo `idE` do payload funcionaria no Magic e **quebraria silenciosamente no YGO**. Na regra (`edid=`, uma requisição = uma edição) o problema nem existe: você já sabe qual edição pediu. O `idE` do payload só é indispensável na exceção `group=` (Magic mesclado) — e lá ele vem preenchido, por isso o split funciona.
 
 (Repare: é a separação entre dimensão e fato aparecendo por necessidade do scraping, antes do dbt.)
 
@@ -193,6 +198,8 @@ Racional (decisão do dono do projeto): a Liga teve trabalho para agrupar o Magi
 ---
 
 ## Mapa de campos do `cardsjson`
+
+> ⚠️ **Este mapa é contrato do Magic, não dos quatro jogos.** Foi levantado sobre payloads de LigaMagic. Pokémon, Yu-Gi-Oh e Lorcana compartilham só um núcleo de 21 campos e reaproveitam alguns nomes com outro sentido — ver [Divergência entre jogos](#divergência-entre-jogos) antes de assumir que um "Confirmado" vale fora do Magic.
 
 Exemplo real (LigaMagic, grupo `group=480601` / Foundations, capturado em 2026-07-15):
 
@@ -262,6 +269,26 @@ Exemplo real (LigaMagic, grupo `group=480601` / Foundations, capturado em 2026-0
 | `pF` | `0` em toda a amostra das duas edições. Nome sugere foil, mas o Sire tem foil a R$ 158,75 e o campo continua 0. <!-- PREENCHER: resultado de `grep -o '"pF":[0-9]*' fdn.html \| sort -u` --> |
 | `tag` | `null` em toda a amostra |
 
+### Divergência entre jogos
+
+Verificado nos quatro HTMLs de amostra em 2026-07-16 (união das chaves sobre todas as cartas de cada arquivo). Os quatro compartilham um **núcleo de 21 campos**, mas nem o conjunto nem o *significado* são idênticos:
+
+| | Campos além do núcleo | Nota |
+|---|---|---|
+| Magic | `iC`, `iH`, `iPP`, `tag` | únicos com cor (`iC`) e as hipóteses `iH`/`iPP` |
+| Pokémon / Yu-Gi-Oh / Lorcana | `sSigla`, `idNC` | conjunto **idêntico entre os três**; sem `iC` |
+
+Reaproveitamento de campo (mesmo nome, sentido diferente por jogo — a armadilha que uma amostra só de Magic esconde):
+
+- **`sC`** — custo de mana no Magic; **tipo de energia** no Pokémon (`"G"`); vazio no Yu-Gi-Oh.
+- **`iCMC`, `sT`, `iT`** — preenchidos no Magic; `null` nos outros três.
+- **`idE`** — id real da edição no Magic, Pokémon e Lorcana; **`0` em todas as cartas do Yu-Gi-Oh**. Nunca usar como chave lida do payload (ver [Desenho do spider](#desenho-do-spider-a-regra-e-a-exceção)).
+- **`sSigla`** (só fora do Magic) — sigla da edição **por carta**. É a chave de junção confiável nesses jogos, ainda mais com o `idE` zerado do YGO. No Magic não existe — lá a sigla vem do `.tb-ed`.
+- **`nEN`** embute informação extra fora do Magic: nº do coletor no Pokémon (`"Erika's Oddish (#001/217)"`), raridade/variação no YGO (`"(Secret Rare)"`). O parsing precisa prever isso.
+- **`idNC`** — desconhecido novo (só fora do Magic); `0` nas amostras.
+
+**Consequência para o spider parametrizado:** emitir "todos os campos" gera colunas diferentes por jogo — tudo bem, a carga decide o que vira coluna. Mas **nenhum parsing pode assumir que um campo significa o mesmo nos quatro**. O que é comum é a *estrutura* (array de produtos com preço/nome/raridade/imagem), não a semântica campo a campo.
+
 ---
 
 ## Limitações conhecidas da fonte
@@ -292,7 +319,7 @@ Atenção: `//` no `nEN` **não** marca duplicata. Dupla face legítima existe e
 | **Raspar cada edição por `edid=` (uniforme nos 4 sites)** | `group=` só existe no Magic; a estratégia uniforme funciona em todos com um caminho de código só, sem lógica de split/dedup |
 | **`group=` (Magic) fica como otimização diferida** | ganho real (~10×) mas com imposto de complexidade; a cadência mensal tem folga. Revisitar na fase 5 se o crawl do Magic doer. "Spider da regra agora, exceção depois." |
 | **Capturar o parentesco pai→filha como dado, em todos os sites** | a hierarquia existe na árvore de edições mesmo sem `group=`. Marcando o vínculo desde já, uma futura chegada de `group=` nos outros sites vira só tratamento de valores, sem quebra retroativa |
-| **Spider em dois estágios** (lista de edições → edições) | o nome/sigla/pai das edições só existe na lista; o estágio 2 raspa cada edição e casa pelo `idE` |
+| **Spider em dois estágios** (lista de edições → edições) | o nome/sigla/pai só existe na lista. A identidade da edição vem da **requisição** (`cb_kwargs`/`meta`), não do `idE` do payload — no YGO ele é `0` em todas as cartas |
 | **`DOWNLOAD_DELAY` explícito respeitando os 360s** | `ROBOTSTXT_OBEY` filtra URLs proibidas mas **não aplica `Crawl-delay`**; `AUTOTHROTTLE_MAX_DELAY` tem padrão 60s. As duas configs que parecem resolver, não resolvem. |
 | **Crawl mensal** | **Revisável.** Não é imposição da fonte: 360s comporta semanal folgado (~30h/site × 4 sites = 120h de 720h no mês). Mensal é escolha de simplicidade e boa vizinhança. Custo: 12 pontos/ano — bom para tendência, cego para picos que sobem e voltam em 2 semanas. **A frequência real depende do KPI, que ainda não foi definido.** Lembre: dá para reamostrar semanal→mensal; nunca o contrário. Dado temporal não capturado está perdido. |
 | **Sites em sequência, nunca em paralelo** | origem compartilhada. 4 sites em paralelo a 360s = 1 req/90s no servidor real: respeita a letra, fura o espírito. **Isso invalida "crawls paralelos" previsto na fase 6.** |
@@ -321,13 +348,14 @@ Nada aqui bloqueia a fase 1.
 
 ## Nota de método
 
-Quatro hipóteses foram levantadas e **refutadas pelos dados** durante este diagnóstico:
+Cinco hipóteses foram levantadas e **refutadas pelos dados** durante este diagnóstico:
 
 1. `dt` seria data de atualização do preço → depois, data de lançamento da edição → é data do preview.
 2. `iT` separaria carta individual de composto → é o tipo da carta. A correlação era espúria: na edição de tokens, todo token individual era criatura por acaso.
 3. `iCO` contaria impressões, com previsão de 27 para o Sire of Seven Deaths → a tela mostrou 3 edições.
 4. "Raspar grupos via `group=`" seria a estratégia geral → o `group=` só existe no Magic. A estratégia foi derivada de um site e generalizada para os quatro.
+5. "Os quatro jogos têm os mesmos campos" → há um núcleo comum, mas o Magic tem 4 campos exclusivos, os outros têm 2, e nomes iguais (`sC`, `idE`) mudam de sentido. O mapa de campos inteiro foi levantado só no Magic.
 
-Todas soavam plausíveis. A #2 e a #4 caíram pelo mesmo motivo: **amostra homogênea gera conclusão falsa.** A #2 vinha de uma edição só, de um tipo só; a #4, de um site só. Nos dois casos foi preciso cruzar com um caso diferente (outra edição; outro site) para a generalização indevida cair.
+Todas soavam plausíveis. A #2, a #4 e a #5 caíram pelo mesmo motivo: **amostra homogênea gera conclusão falsa.** A #2 vinha de uma edição só, de um tipo só; a #4 e a #5, de um site só (Magic). Nos três casos foi preciso cruzar com um caso diferente (outra edição; outro site) para a generalização indevida cair — a #5 só apareceu quando os payloads de Pokémon, Yu-Gi-Oh e Lorcana foram abertos e comparados chave a chave.
 
 **Daí as duas regras deste documento:** testar hipótese com amostra diversa antes de codificar filtro em cima dela, e marcar explicitamente o que é certeza e o que é palpite. Um documento que não separa os dois transforma chute em fato na cabeça de quem lê depois — inclusive na do autor.
