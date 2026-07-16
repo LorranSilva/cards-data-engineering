@@ -1,4 +1,5 @@
 .claude/
 docs/*.html
+docs/dicionario.md
 fdn.html
 .venv/

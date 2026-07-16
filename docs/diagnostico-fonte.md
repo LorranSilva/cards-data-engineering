@@ -367,6 +367,7 @@ Nada aqui bloqueia a fase 1. **Resolvidos nesta rodada:** a hierarquia pai→fil
 - [ ] `id` é da carta ou da impressão? (teste do Heartless Act em Ikoria)
 - [ ] Quantos casos de `p1b` fora da faixa existem? (o Goblin não deve ser o único)
 - [ ] Lorcana entra no escopo? A tabela `game` só tem `ptcg`, `ygo`, `mtg`. Sugestão: usar Lorcana **depois** do spider base pronto, como teste da parametrização — se custar mais que uma subclasse de 5 linhas + 1 `INSERT`, a abstração está errada.
+- [ ] **Arquitetura — próxima visita, não fase 1:** separar busca de parse guardando o HTML cru (camada raw / `HTTPCACHE_ENABLED`) para reprocessar sem re-crawlear. **Não acelera o crawl** — o custo é o download, governado pelos 360s. O ganho é reprocessamento barato: corrigir o parser, extrair um campo novo ou gerar fixture sem gastar os 360s de novo. Avaliar na fase 2/3.
 
 ---
 
