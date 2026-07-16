@@ -1,0 +1,9 @@
+[project]
+name = "cards-data-engineering"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "ipykernel>=7.3.0",
+    "psycopg2-binary>=2.9.12",
+    "scrapy>=2.17.0",
+]

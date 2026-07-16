@@ -1,3 +1,4 @@
 .claude/
 docs/*.html
 fdn.html
+.venv/
