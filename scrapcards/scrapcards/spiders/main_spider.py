@@ -14,7 +14,9 @@ class MainSpider(scrapy.Spider):
         i = raw_decode.index("{", raw_decode.index("jsonEditions"))
         data, _ = json.JSONDecoder().raw_decode(raw_decode[i:])
 
-        all_collections = data["main"] + [f for daughters in data["aux"].values() for f in daughters]
+        main_collections = data["main"]
+        auxiliary_collections = [f for daughters in data["aux"].values() for f in daughters] if data["aux"] else []
+        all_collections = main_collections + auxiliary_collections
 
         for collection in all_collections:
             self.logger.info("collection: " + str(collection))
@@ -23,5 +25,5 @@ class MainSpider(scrapy.Spider):
                 'edition_name': collection['name'],
                 'edition_acronym': collection['acronym'],
                 'edition_release_date': collection['dtrelease'],
-                'parent_edition_id': collection['idgrouped'] if collection['idgrouped'] != 0 else None,
+                'parent_edition_id': collection['idgrouped'] if collection['idgrouped'] != "0" else None,
             }
