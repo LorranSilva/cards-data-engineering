@@ -12,15 +12,11 @@ BOT_NAME = 'scrapcards'
 SPIDER_MODULES = ['scrapcards.spiders']
 NEWSPIDER_MODULE = 'scrapcards.spiders'
 
-USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:39.0) Gecko/20100101 Firefox/39.0'
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 #USER_AGENT = 'scrapcards (+http://www.yourdomain.com)'
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = True
-
-# Scrapy Server Endpoint
-SPLASH_URL = 'http://localhost:8050'
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
 #CONCURRENT_REQUESTS = 32
@@ -47,9 +43,9 @@ SPLASH_URL = 'http://localhost:8050'
 
 # Enable or disable spider middlewares
 # See https://docs.scrapy.org/en/latest/topics/spider-middleware.html
-SPIDER_MIDDLEWARES = {
-   'scrapcards.middlewares.ScrapcardsSpiderMiddleware': 543,
-}
+# SPIDER_MIDDLEWARES = {
+#    'scrapcards.middlewares.ScrapcardsSpiderMiddleware': 543,
+# }
 
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
