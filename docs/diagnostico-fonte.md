@@ -109,13 +109,38 @@ O DNS **não** confirma isso: os sites estão atrás de Cloudflare (`172.66.x`, 
 
 ## Como a fonte funciona
 
-### Ponto de entrada
+### Ponto de entrada — a lista de edições (`jsonEditions`)
 
-`?view=cards/edicoes` — lista de edições com nome, sigla e hierarquia (pai → filhas). É daqui que o crawl parte.
+A dimensão de edição vem **embutida como JSON em toda página** (não só em `?view=cards/edicoes`), na variável `let jsonEditions = {...}` num `<script>` no fim do `<body>` — mesma técnica do `cardsjson`. Ela tem **duas chaves**:
 
-**A árvore inteira vem no HTML cru.** Confirmado: cliquei em "EXIBIR MAIS" com o Network aberto e nenhuma requisição nova apareceu → é client-side, todas as edições já estão no HTML. O estágio 1 do spider é uma requisição só, sem paginação.
+- **`main`** — as edições **base/avulsas** (todas com `idgrouped == "0"`);
+- **`aux`** — um dicionário `{id_do_pai: [filhas]}` com as filhas agrupadas sob cada pai.
 
-<!-- PREENCHER (verificar ao construir o estágio 1): a hierarquia pai→filha (as setas ↳) está codificada de forma parseável no HTML (aninhamento real), ou é só espaçamento visual? A estratégia de "marcar grupos internamente" depende disso. -->
+Cada edição (em `main` ou em `aux`) é um objeto:
+
+```json
+{ "id": "480601", "acronym": "fdn", "name": "Foundations",
+  "nameen": "Foundations", "namept": "", "nameptsa": "",
+  "dtrelease": "...", "idgrouped": "0",
+  "icon": "\/\/repositorio.sbrauble.com\/arquivos\/up\/ed_mtg\/FDN_C.gif" }
+```
+
+Campos úteis: `id` (= o `edid=` da URL), `acronym` (a sigla **sem** os parênteses do `.tb-ed`), `name`/`nameen`/`namept`, `dtrelease` (**data de lançamento da edição** — atributo de dimensão de graça, e o único campo temporal confiável da fonte) e **`idgrouped`** (o vínculo pai→filha).
+
+**Hierarquia — pergunta resolvida, e o site já a estrutura.** (Estava "Em aberto": dado parseável ou recuo visual? É dado.) Duas leituras equivalentes: pela **estrutura** (`main` = pais, `aux[id]` = filhas daquele pai) ou pelo **campo** (`idgrouped == "0"` → base; `idgrouped != "0"` → filha, e o valor **é o `id` da base**). Hierarquia de **um nível só**. Ex.: Foundations base `id=480601 idgrouped=0`; Foundations (Tokens) `id=480602 idgrouped=480601`.
+
+Contagens (verificadas nos quatro HTMLs, 2026-07-16):
+
+| Site | `main` (pais/avulsas) | grupos (`aux`) | filhas | **total** |
+|---|---|---|---|---|
+| Magic | 926 | 130 | 563 | **1489** |
+| Pokémon | 754 | 13 | 25 | **779** |
+| Yu-Gi-Oh | 1191 | 9 | 42 | **1233** |
+| Lorcana | 19 | 0 | 0 | **19** |
+
+O parentesco existe **em todos os sites**, inclusive onde não há `group=` (Lorcana só não tem grupos ainda). O **total** é o número de edições a raspar por `edid=` (uma requisição cada) — base para a capacidade da fase 5.
+
+**A lista inteira vem no HTML cru, sem paginação.** O "EXIBIR MAIS" é client-side (cliquei com o Network aberto, nenhuma requisição). O estágio 1 é **parsear esse JSON uma vez** — de `?view=cards/edicoes` ou de qualquer página. Não precisa de crawl da árvore nem de parsing de recuo visual.
 
 ### Duas formas de URL
 
@@ -174,24 +199,24 @@ Funciona igual em página de grupo e de edição avulsa. Note que a sigla vem **
 
 ### Desenho do spider: a regra e a exceção
 
-**A estratégia (a regra):** raspar cada edição individualmente por `edid=`, varrendo a lista de edições. Funciona nos quatro sites com um só caminho de código — cada edição é uma requisição, uma `collection`. O parentesco pai→filha é capturado como **dado** (ex.: `parent_edition_id`), lido da árvore da lista de edições, independente de existir `group=` ou não.
+**A estratégia (a regra):** raspar cada edição individualmente por `edid=`, varrendo a lista de edições. Funciona nos quatro sites com um só caminho de código — cada edição é uma requisição, uma `collection`. O parentesco pai→filha é capturado como **dado** (`parent_edition_id = idgrouped if idgrouped != "0" else None`), lido do `jsonEditions`, independente de existir `group=` ou não.
 
 Isso separa o spider em dois estágios:
 
-1. `parse` de `?view=cards/edicoes` → dicionário `{idE: (nome, sigla, id_do_pai)}`, incluindo o vínculo hierárquico de todos os sites
+1. parsear o `jsonEditions` (`main` + `aux`, embutido em qualquer página) → dicionário `{id: (acronym, nomes, dtrelease, idgrouped)}` — a dimensão de edição inteira, com o vínculo hierárquico, de todos os sites, numa requisição só
 2. `parse` de cada edição (`edid=`) → emitir os itens. **A identidade da edição vem da requisição** — o `edid=`/`sigla` que você pediu, carregado no `cb_kwargs`/`meta` da própria `Request` — e *não* do `idE` lido de volta do payload.
 
 ⚠️ **Por que não reler o `idE` do payload:** no Yu-Gi-Oh ele vem `0` em **todas** as cartas (verificado: 36/36 na amostra `L26D`); quem identifica a edição lá é o `sSigla`. Casar edição pelo `idE` do payload funcionaria no Magic e **quebraria silenciosamente no YGO**. Na regra (`edid=`, uma requisição = uma edição) o problema nem existe: você já sabe qual edição pediu. O `idE` do payload só é indispensável na exceção `group=` (Magic mesclado) — e lá ele vem preenchido, por isso o split funciona.
 
 (Repare: é a separação entre dimensão e fato aparecendo por necessidade do scraping, antes do dbt.)
 
-**A otimização Magic-only (a exceção), NÃO implementada por ora:** o `group=` do Magic mescla as filhas numa requisição. Confirmado: `group=480601` retorna **11 `idE` distintos** (480601–480614) de uma vez, cortando o crawl do Magic em ~10×.
+**A otimização Magic-only (a exceção), NÃO implementada por ora:** o `group=` do Magic mescla as filhas numa requisição. Confirmado: `group=480601` retorna **11 `idE` distintos** (480601–480614) de uma vez — 11 edições em 1 requisição **naquele grupo**.
 
-Por que fica de fora agora:
+Por que fica fora **da fase 1** (e por que não é urgente):
 
-- O ganho é real, mas cobra imposto de complexidade: exige **separar** o `cardsjson` mesclado por `idE` (a página do grupo só nomeia o grupo no `.tb-ed`) e **deduplicar** — não raspar as filhas por `edid=` se já veio pelo grupo.
-- A cadência é mensal, com folga de tempo de sobra. O desconto resolve um problema de tempo que provavelmente não temos.
-- Otimizar antes de medir compra um segundo caminho de código a crédito. Se a fase 5 (capacidade) mostrar que o crawl do Magic dói, adiciona-se o `group=` **depois**, com número na mão.
+- O ganho cobra imposto de complexidade: exige **separar** o `cardsjson` mesclado por `idE` (a página do grupo só nomeia o grupo no `.tb-ed`) e **deduplicar** — não raspar as filhas por `edid=` se já veio pelo grupo.
+- **O ganho global é modesto, não 10×.** Por grupo é grande, mas na conta do site inteiro o `group=` dobra as 563 filhas nos 130 grupos: o Magic vai de **1489 → 926 requisições** (~38%, ~149h → ~93h). Não torna o semanal viável (mesmo com ele, o total dos 4 sites fica ~296h > 168h) e o **mensal cabe sem ele**. É otimização de conforto, não de viabilidade.
+- Ordem certa: fazer o spider-regra funcionar e medir primeiro, **depois** avaliar o `group=` como exceção. Não se otimiza um crawl que ainda não roda; manter os dois caminhos separados evita acoplar a exceção antes de a regra existir. A fase 5 decide, com o número na mão.
 
 Racional (decisão do dono do projeto): a Liga teve trabalho para agrupar o Magic e pode agrupar os outros sites no futuro. Capturando o parentesco como dado desde já, uma eventual chegada de `group=` nos demais sites vira só tratamento de valores — o histórico já tem o vínculo e nada quebra retroativamente. **Um spider da regra agora; outro (ou um caminho opcional) para a exceção, quando/se ela se generalizar.**
 
@@ -317,14 +342,14 @@ Atenção: `//` no `nEN` **não** marca duplicata. Dupla face legítima existe e
 |---|---|
 | **Scrapy puro; Splash sai, nada entra no lugar** | dados server-side no HTML; renderização é desnecessária |
 | **Raspar cada edição por `edid=` (uniforme nos 4 sites)** | `group=` só existe no Magic; a estratégia uniforme funciona em todos com um caminho de código só, sem lógica de split/dedup |
-| **`group=` (Magic) fica como otimização diferida** | ganho real (~10×) mas com imposto de complexidade; a cadência mensal tem folga. Revisitar na fase 5 se o crawl do Magic doer. "Spider da regra agora, exceção depois." |
-| **Capturar o parentesco pai→filha como dado, em todos os sites** | a hierarquia existe na árvore de edições mesmo sem `group=`. Marcando o vínculo desde já, uma futura chegada de `group=` nos outros sites vira só tratamento de valores, sem quebra retroativa |
+| **`group=` (Magic) fica fora da fase 1; otimização revisável na fase 5** | ganho por grupo é grande, mas o global é ~38% no Magic (1489→926 req, ~149h→~93h). Não viabiliza semanal e o mensal cabe sem ele: conforto, não necessidade. "Spider da regra agora, exceção depois." |
+| **Capturar o parentesco pai→filha como dado, em todos os sites** | o vínculo está no campo `idgrouped` do `main` JSON, não só no `group=` do Magic. Verificado preenchido em todos (Magic 563 filhas, Pokémon 25, YGO 42, Lorcana 0). Marcando desde já, uma futura chegada de `group=` nos outros sites vira só tratamento de valores, sem quebra retroativa |
 | **Spider em dois estágios** (lista de edições → edições) | o nome/sigla/pai só existe na lista. A identidade da edição vem da **requisição** (`cb_kwargs`/`meta`), não do `idE` do payload — no YGO ele é `0` em todas as cartas |
 | **`DOWNLOAD_DELAY` explícito respeitando os 360s** | `ROBOTSTXT_OBEY` filtra URLs proibidas mas **não aplica `Crawl-delay`**; `AUTOTHROTTLE_MAX_DELAY` tem padrão 60s. As duas configs que parecem resolver, não resolvem. |
-| **Crawl mensal** | **Revisável.** Não é imposição da fonte: 360s comporta semanal folgado (~30h/site × 4 sites = 120h de 720h no mês). Mensal é escolha de simplicidade e boa vizinhança. Custo: 12 pontos/ano — bom para tendência, cego para picos que sobem e voltam em 2 semanas. **A frequência real depende do KPI, que ainda não foi definido.** Lembre: dá para reamostrar semanal→mensal; nunca o contrário. Dado temporal não capturado está perdido. |
+| **Crawl mensal** | **Revisável, mas agora com número.** Raspando cada edição por `edid=`: Magic ~149h, YGO ~123h, Pokémon ~78h, Lorcana ~2h → **~352h (≈15 dias) por passada completa**. Mensal cabe (usa ~metade do mês); **semanal NÃO cabe** (352h > 168h da semana), e nem o `group=` resolve (levaria o total a ~296h, ainda acima de 168h). Custo do mensal: 12 pontos/ano — bom para tendência, cego para picos de 2 semanas. **A frequência real depende do KPI, ainda não definido.** Dá para reamostrar semanal→mensal; nunca o contrário. |
 | **Sites em sequência, nunca em paralelo** | origem compartilhada. 4 sites em paralelo a 360s = 1 req/90s no servidor real: respeita a letra, fura o espírito. **Isso invalida "crawls paralelos" previsto na fase 6.** |
-| **`JOBDIR` para retomada** | um crawl de ~30h será interrompido. Pegadinhas: só serializa em shutdown gracioso (1× Ctrl+C), e usar `-o` (append) e não `-O` (overwrite) — retomar sobrescrevendo apaga o já coletado. |
-| **`scraped_at` gravado por item, no yield** | um crawl de 30h não é um snapshot: é um borrão de 30h. Carimbar a data da execução em todas as linhas seria mentira. |
+| **`JOBDIR` para retomada** | uma passada dura **dias** — será interrompida. Pegadinhas: só serializa em shutdown gracioso (1× Ctrl+C), e usar `-o` (append) e não `-O` (overwrite) — retomar sobrescrevendo apaga o já coletado. |
+| **`scraped_at` gravado por item, no yield** | uma passada de dias não é um snapshot: é um borrão temporal. Carimbar a data da execução em todas as linhas seria mentira. |
 | **Foil/Promo/Pre-Release ficam de fora** | custa 1 requisição por carta. **Escolha, não esquecimento** — e escolha com perda irreversível: a série de preço foil só começa quando decidirmos capturar. |
 | **Raridade (`iR`) entra desde já** | está no payload, custa zero. Não capturar não economiza nada. |
 | **O spider emite todos os campos do payload** | a requisição já foi paga e o JSON já foi parseado; emitir 22 campos em vez de 6 custa zero e preserva liberdade para quando os KPIs existirem. Quem escolhe o que vira coluna é a carga, não o spider. |
@@ -334,15 +359,15 @@ Atenção: `//` no `nEN` **não** marca duplicata. Dupla face legítima existe e
 
 ## Em aberto
 
-Nada aqui bloqueia a fase 1.
+Nada aqui bloqueia a fase 1. **Resolvidos nesta rodada:** a hierarquia pai→filha (é a estrutura `main`/`aux` + o campo `idgrouped` do `jsonEditions`, não recuo visual) e as contagens de edição por site (ver **Ponto de entrada**).
 
-- [ ] A hierarquia pai→filha está codificada de forma parseável no HTML da lista de edições (aninhamento real, não só espaçamento)? Verificar ao construir o estágio 1 — a captura do parentesco depende disso.
 - [ ] `pF`: resultado do `grep -o '"pF":[0-9]*' fdn.html | sort -u`
 - [ ] `iCO`: sem hipótese viável
+- [ ] `idNC` (só fora do Magic): significado — `0` nas amostras
 - [ ] `id` é da carta ou da impressão? (teste do Heartless Act em Ikoria)
 - [ ] Quantos casos de `p1b` fora da faixa existem? (o Goblin não deve ser o único)
-- [ ] **Para a fase 5 (capacidade), não bloqueante:** contar edições e grupos por site — `grep -o 'card=edid=[0-9]*' edicoes.html | sort -u | wc -l` e o mesmo com `group=`. Dá o tamanho real do crawl e quanto o `group=` do Magic economizaria.
 - [ ] Lorcana entra no escopo? A tabela `game` só tem `ptcg`, `ygo`, `mtg`. Sugestão: usar Lorcana **depois** do spider base pronto, como teste da parametrização — se custar mais que uma subclasse de 5 linhas + 1 `INSERT`, a abstração está errada.
+- [ ] **Arquitetura — próxima visita, não fase 1:** separar busca de parse guardando o HTML cru (camada raw / `HTTPCACHE_ENABLED`) para reprocessar sem re-crawlear. **Não acelera o crawl** — o custo é o download, governado pelos 360s. O ganho é reprocessamento barato: corrigir o parser, extrair um campo novo ou gerar fixture sem gastar os 360s de novo. Avaliar na fase 2/3.
 
 ---
 

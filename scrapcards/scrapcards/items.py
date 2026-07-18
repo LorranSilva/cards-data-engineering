@@ -6,7 +6,21 @@
 import scrapy
 
 
-class ScrapcardsItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    pass
+class EditionItem(scrapy.Item):
+    edition_id = scrapy.Field()
+    edition_name = scrapy.Field()
+    edition_acronym = scrapy.Field()
+    edition_release_date = scrapy.Field()
+    parent_edition_id = scrapy.Field()
+    scraped_at = scrapy.Field()
+
+
+class CardItem(scrapy.Item):
+    id_external = scrapy.Field()
+    collection_id = scrapy.Field()
+    value_min = scrapy.Field()
+    value_avg = scrapy.Field()
+    value_max = scrapy.Field()
+    name_EN = scrapy.Field()
+    name_PT = scrapy.Field()
+    scraped_at = scrapy.Field()
