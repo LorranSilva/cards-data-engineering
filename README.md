@@ -48,7 +48,7 @@ uv run scrapy crawl main_spider -a game=lor -s JOBDIR=crawls/lor
 # use -o (append), nunca -O (overwrite), para não perder o já coletado ao retomar
 ```
 
-> ⚠️ O `robots.txt` da fonte pede `Crawl-delay: 360` (6 min entre requisições). O `DOWNLOAD_DELAY = 360` respeita isso — um crawl completo leva dias. **Sites em sequência, nunca em paralelo** (origem compartilhada).
+> O `robots.txt` da fonte pede `Crawl-delay: 360` (6 min entre requisições). O `DOWNLOAD_DELAY = 360` respeita isso — um crawl completo leva dias. **Sites em sequência, nunca em paralelo** (origem compartilhada).
 
 ## Roadmap
 
@@ -56,7 +56,7 @@ O detalhamento de cada fase vive em [`.claude/fases/`](.claude/fases/) (entregas
 
 | # | Fase | Em uma linha |
 |---|---|---|
-| 1 | **Reconstrução da extração** | Diagnóstico do site novo; spider único parametrizado em dois estágios (dimensão/fato). ✅ offline |
+| 1 | **Reconstrução da extração** | Diagnóstico do site novo; spider único parametrizado em dois estágios (dimensão/fato). offline |
 | 2 | **Saneamento** | Notebook → módulos testáveis; padronizar campos; credenciais por variável de ambiente. |
 | 3 | **CI** | GitHub Actions com ruff + pytest sobre fixtures salvas — nunca crawl real no CI. |
 | 4 | **Dimensão temporal** | `scraped_at` em spiders e tabelas; cada execução vira um snapshot. |
