@@ -13,7 +13,7 @@ SPIDER_MODULES = ['scrapcards.spiders']
 NEWSPIDER_MODULE = 'scrapcards.spiders'
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-#USER_AGENT = 'scrapcards (+http://www.yourdomain.com)'
+USER_AGENT = 'cards-data-engineering (+https://github.com/LorranSilva/cards-data-engineering)'
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = True
@@ -24,6 +24,8 @@ ROBOTSTXT_OBEY = True
 # Configure a delay for requests for the same website (default: 0)
 # See https://docs.scrapy.org/en/latest/topics/settings.html#download-delay
 # See also autothrottle settings and docs
+# Respeita o Crawl-delay: 360 do robots.txt (ROBOTSTXT_OBEY não aplica o delay;
+# AUTOTHROTTLE_MAX_DELAY padrão é 60s < 360s). Quem garante o piso é esta linha.
 DOWNLOAD_DELAY = 360
 # The download delay setting will honor only one of:
 #CONCURRENT_REQUESTS_PER_DOMAIN = 16
@@ -86,8 +88,25 @@ DOWNLOAD_DELAY = 360
 #HTTPCACHE_IGNORE_HTTP_CODES = []
 #HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
 
-FEED = 'json'
 FEED_EXPORT_ENCODING = 'utf-8'
+
+# Dois estágios, duas saídas: a dimensão (edições) e o fato (cartas) vão para
+# arquivos separados, roteados pela classe do item. overwrite=False para não
+# apagar o já coletado quando um crawl é retomado via JOBDIR (use -o, nunca -O).
+FEEDS = {
+    'datasets/editions.json': {
+        'format': 'json',
+        'encoding': 'utf-8',
+        'item_classes': ['scrapcards.items.EditionItem'],
+        'overwrite': False,
+    },
+    'datasets/cards.json': {
+        'format': 'json',
+        'encoding': 'utf-8',
+        'item_classes': ['scrapcards.items.CardItem'],
+        'overwrite': False,
+    },
+}
 
 # Set settings whose default value is deprecated to a future-proof value
 REQUEST_FINGERPRINTER_IMPLEMENTATION = '2.7'

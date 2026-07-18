@@ -8,6 +8,7 @@ CREATE TABLE game (
 
 CREATE TABLE collection (
 	id SERIAL PRIMARY KEY NOT NULL,
+  id_external VARCHAR(50),
   game_id INT UNIQUE,
 	name VARCHAR(150),
 	acronym VARCHAR(15),
@@ -21,6 +22,7 @@ ALTER TABLE collection DROP CONSTRAINT collection_game_id_key;
 
 CREATE TABLE card (
   id SERIAL PRIMARY KEY NOT NULL,
+  id_external VARCHAR(50),
   collection_id INT,
   value_min DECIMAL(13, 2),
   value_max DECIMAL(13, 2),
