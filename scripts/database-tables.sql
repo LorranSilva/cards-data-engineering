@@ -12,10 +12,13 @@ CREATE TABLE collection (
   game_id INT UNIQUE,
 	name VARCHAR(150),
 	acronym VARCHAR(15),
+  release_date DATE,
+  parent_id_external VARCHAR(50),
 	cards_quantity integer,
 	value_min decimal(13,2),
 	value_avg decimal(13,2),
   value_max decimal(13,2),
+  scraped_at TIMESTAMPTZ,
   FOREIGN KEY (game_id) REFERENCES game (id) ON DELETE CASCADE
 );
 ALTER TABLE collection DROP CONSTRAINT collection_game_id_key;
@@ -25,9 +28,11 @@ CREATE TABLE card (
   id_external VARCHAR(50),
   collection_id INT,
   value_min DECIMAL(13, 2),
+  value_avg DECIMAL(13, 2),
   value_max DECIMAL(13, 2),
   name_EN VARCHAR(200),
   name_PT VARCHAR(200),
+  scraped_at TIMESTAMPTZ,
   FOREIGN KEY (collection_id) REFERENCES collection (id) ON DELETE CASCADE
 );
 

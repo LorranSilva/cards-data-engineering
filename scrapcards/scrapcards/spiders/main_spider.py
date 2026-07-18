@@ -14,11 +14,12 @@ class MainSpider(scrapy.Spider):
         'lor': 'https://www.ligalorcana.com.br',
     }
 
-    def __init__(self, game='lor', *args, **kwargs):
+    def __init__(self, game='lor', limit=0, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if game not in self.BASE_URLS:
             raise ValueError(f"game deve ser um de {list(self.BASE_URLS)}, veio {game!r}")
         self.game = game
+        self.limit = int(limit)
         base = self.BASE_URLS[game]
         self.allowed_domains = [base.split('//', 1)[1]]
         self.start_urls = [f'{base}/?view=cards/edicoes']
@@ -31,9 +32,10 @@ class MainSpider(scrapy.Spider):
         main_collections = data["main"]
         auxiliary_collections = [f for daughters in data["aux"].values() for f in daughters] if data["aux"] else []
         all_collections = main_collections + auxiliary_collections
+        collections = all_collections[:self.limit] if self.limit else all_collections
         now = datetime.now(timezone.utc).isoformat()
 
-        for collection in all_collections:
+        for collection in collections:
             yield EditionItem(
                 edition_id=collection['id'],
                 edition_name=collection['name'],

@@ -34,7 +34,7 @@ EXPECTED = {
 
 
 def test_stage1_editions_all_games():
-    spider = MainSpider(game='lor')  # o jogo não afeta o parsing, só a URL base
+    spider = MainSpider(game='lor', limit=1)  # o jogo não afeta o parsing, só a URL base
     for fixture, (total, com_pai) in EXPECTED.items():
         resp = response_from(fixture, 'https://www.ligalorcana.com.br/?view=cards/edicoes')
         out = list(spider.parse(resp))
@@ -49,7 +49,7 @@ def test_stage1_editions_all_games():
 
 def test_stage2_one_collection():
     """Uma coleção do Lorcana: 262 cartas, com a FK vinda do cb_kwargs."""
-    spider = MainSpider(game='lor')
+    spider = MainSpider(game='lor', limit=1)
     resp = response_from('lor.html', 'https://www.ligalorcana.com.br/?view=cards/search&card=edid=17')
     cards = list(spider.parse_cards(resp, edition_id=17))
     assert all(isinstance(c, CardItem) for c in cards)
