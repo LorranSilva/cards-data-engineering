@@ -5,3 +5,4 @@ fdn.html
 .venv/
 __pycache__/
 datasets/
+.env
